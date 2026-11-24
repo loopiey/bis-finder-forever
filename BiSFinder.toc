@@ -1,0 +1,24 @@
+## Interface: 16001
+## Title: BiSFinder
+## Notes: The best items for your talent tree, slot by slot, and a step-by-step upgrade plan. /bis
+## Version: 1.0.0
+## Author: loopiey
+## IconTexture: Interface\AddOns\BiSFinder\Media\icon
+## AddonCompartmentFunc: BiSFinder_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: BiSFinder_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: BiSFinder_OnCompartmentLeave
+## SavedVariables: BiSFinderDB
+## SavedVariablesPerCharacter: BiSFinderCharDB
+## X-License: GPL-3.0-or-later
+
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+
+Data\Weights.lua
+Data\Sources.lua
+Core.lua
+UI.lua
+Minimap.lua
+Main.lua

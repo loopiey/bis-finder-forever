@@ -1,0 +1,5 @@
+package-as: BiSFinder
+
+ignore:
+  - tools
+  - Data/Crafted.lua
