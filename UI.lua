@@ -99,6 +99,26 @@ local function getBar(i)
   b.left = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   b.right = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); b.right:SetPoint("RIGHT", -8, 0)
   local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.05)
+  -- plan steps: move up / down (shift: to the top / bottom)
+  local function arrow(tex, dir, tip)
+    local a = CreateFrame("Button", nil, b)
+    a:SetSize(20, 20)
+    a:SetNormalTexture(tex .. "-Up"); a:SetPushedTexture(tex .. "-Down"); a:SetDisabledTexture(tex .. "-Disabled")
+    a:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+    a:SetScript("OnClick", function()
+      if b.moveKey and f.specName then BF.MoveStep(f.specName, f.stepKeys or {}, b.moveKey, dir, IsShiftKeyDown()); BF.Draw() end
+    end)
+    a:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:AddLine(tip, 1, 1, 1); GameTooltip:Show()
+    end)
+    a:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    a:Hide()
+    return a
+  end
+  b.down = arrow("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown", 1, "Move down (shift-click: to the bottom)")
+  b.down:SetPoint("RIGHT", -4, 0)
+  b.up = arrow("Interface\\ChatFrame\\UI-ChatIcon-ScrollUp", -1, "Move up (shift-click: to the top)")
+  b.up:SetPoint("RIGHT", b.down, "LEFT", 0, 0)
   b:RegisterForClicks("LeftButtonUp")
   b:SetScript("OnClick", function(self)
     local key = self.collapseKey
@@ -162,7 +182,7 @@ local function getRow(i)
   end)
   r.del:SetScript("OnLeave", function() GameTooltip:Hide() end)
   r.del:Hide()
-  r:RegisterForClicks("LeftButtonUp")
+  r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   r:SetScript("OnEnter", function(self)
     if not self.id then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -179,15 +199,20 @@ local function getRow(i)
       end
     end
     if self.srcText and self.srcText ~= "" then GameTooltip:AddLine(self.srcText, 0.8, 0.8, 0.8, true) end
+    if self.hint then GameTooltip:AddLine(self.hint, 0.6, 0.8, 1, true)
+    elseif not self.inPlan and BF.IsOwnClass() then GameTooltip:AddLine("Alt-click: try it in the gear planner", 0.6, 0.6, 0.6) end
     GameTooltip:Show()
   end)
   r:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  r:SetScript("OnClick", function(self)
-    if not self.id then return end
+  r:SetScript("OnClick", function(self, mouse)
+    if self.onClick and not IsModifierKeyDown() then self.onClick(self, mouse); return end
+    if not self.id or mouse ~= "LeftButton" then return end
     local _, link = (C_Item and C_Item.GetItemInfo or GetItemInfo)(self.id)
     if not link then return end
     if IsModifiedClick("CHATLINK") then ChatEdit_InsertLink(link)
     elseif IsModifiedClick("DRESSUP") then DressUpItemLink(link)
+    elseif IsAltKeyDown() then
+      if BF.IsOwnClass() and BF.TryItem(self.id) then BF.Open("gear") end
     elseif self.slotKey and f.specName and BF.IsOwnClass() and not self.inPlan then
       BF.TogglePick(f.specName, self.slotKey, self.id)
       BF.Draw()
@@ -273,6 +298,7 @@ local function updateControls()
   f.topN:SetText(tostring(BF.TopN()))
   f.filterButton:SetText("Sources (" .. filterCount() .. "/" .. #FILTERS .. ")")
   f.viewButtons.plan:SetEnabled(own)
+  f.viewButtons.gear:SetEnabled(own)
   for k, cb in pairs(filterChecks) do cb:SetChecked(k == "hideFaction" and BF.cdb.hideFaction or BF.cdb.filters[k]) end
   if filterChecks.raid then filterChecks.raid.label:SetText(BF.RaidsOpen() and "Raids" or "Raids (open 9 Dec)") end
 end
@@ -285,6 +311,7 @@ local cursor   -- { y, row, line, bar }
 local function reset()
   for _, r in ipairs(rows) do
     r:Hide(); r.bg:Hide(); r.check:Hide(); r.slotKey = nil; r.rank:SetText(""); r.inPlan = nil; r.del:Hide()
+    r.onClick, r.hint, r.id = nil, nil, nil; r.icon:SetDesaturated(false)
     r.info:SetPoint("TOPRIGHT", -8, -4)
   end
   for _, h in ipairs(lines) do h:Hide() end
@@ -316,8 +343,11 @@ local function addBar(left, right, key)
     b.arrow:Hide(); b.left:SetPoint("LEFT", 10, 0)
   end
   b.left:SetText(left); b.right:SetText(right or "")
+  b.moveKey = nil; b.up:Hide(); b.down:Hide()
+  b.right:ClearAllPoints(); b.right:SetPoint("RIGHT", -8, 0)
   b:Show()
   cursor.y = cursor.y - 26
+  return b
 end
 
 local function nextRow()
@@ -375,7 +405,7 @@ function BF.IsShown() return f ~= nil and f:IsShown() end
 function BF.Draw()
   if not (f and f:IsShown()) then return end
   lastDraw = GetTime()
-  if not BF.IsOwnClass() and BF.cdb.view == "plan" then BF.cdb.view = "list" end
+  if not BF.IsOwnClass() and (BF.cdb.view == "plan" or BF.cdb.view == "gear") then BF.cdb.view = "list" end
   updateControls()
   local idx = BF.SpecIndex()
   local results, specName = rank(idx)
@@ -387,7 +417,10 @@ function BF.Draw()
   f.viewButtons.plan:SetText("My plan (" .. n .. ")")
   for k, b in pairs(f.viewButtons) do if BF.cdb.view == k then b:LockHighlight() else b:UnlockHighlight() end end
   f.clearPlan:SetShown(BF.cdb.view == "plan" and n > 0)
+  f.sortPlan:SetShown(BF.cdb.view == "plan" and BF.HasOrder(specName) and true or false)
+  f.bestOwned:SetShown(BF.cdb.view == "gear"); f.resetGear:SetShown(BF.cdb.view == "gear")
   if BF.cdb.view == "plan" then BF.DrawPlan(idx, specName); return end
+  if BF.cdb.view == "gear" then BF.DrawGear(idx); return end
 
   drawSets()
   local own = BF.IsOwnClass()
@@ -457,8 +490,10 @@ function BF.DrawStatus()
     f.progress:SetWidth(math.max(1, (f:GetWidth() - 28) * pct / 100)); f.progress:Show()
   else
     f.progress:Hide()
-    if BF.cdb.view == "plan" then
-      f.status:SetText("Click a step to fold it. The X removes an item. Done: worn or in your bags or bank.")
+    if BF.cdb.view == "gear" then
+      f.status:SetText("Click a slot to swap its item. Alt-click an item in Best items, or /bis try <item>, to try it here.")
+    elseif BF.cdb.view == "plan" then
+      f.status:SetText("Click a step to fold it, arrows move it. The X removes an item.")
     elseif BF.IsOwnClass() then
       f.status:SetText("Click an item to add it to your plan. Shift-click: link in chat. Ctrl-click: try on.")
     else
@@ -493,14 +528,21 @@ function BF.DrawPlan(idx, specName)
     addLine("|cffbbbbbbOpen \"Best items\" and click the items you want. They are put in order here: the biggest upgrade " ..
       "first, with the dungeon, quest, craft or vendor for each.|r", 10)
   end
-  f.planKeys = {}
+  f.planKeys, f.stepKeys = {}, {}
+  for _, st in ipairs(steps) do f.stepKeys[#f.stepKeys + 1] = st.key end
   for i, st in ipairs(steps) do
     local key = "P:" .. st.key
     f.planKeys[#f.planKeys + 1] = key
     local folded = collapsed()[key]
     local right = st.gain > 0 and string.format("|cff33ff99+%.1f|r", st.gain) or "|cff999999no upgrade|r"
     if folded then right = "|cff999999" .. #st.items .. (#st.items == 1 and " item" or " items") .. "|r   " .. right end
-    addBar(string.format("|cffffffff%d.|r %s", i, st.label), right, key)
+    local bar = addBar(string.format("|cffffffff%d.|r %s", i, st.label), right, key)
+    if #steps > 1 then
+      bar.moveKey = st.key
+      bar.up:Show(); bar.down:Show()
+      bar.up:SetEnabled(i > 1); bar.down:SetEnabled(i < #steps)
+      bar.right:ClearAllPoints(); bar.right:SetPoint("RIGHT", bar.up, "LEFT", -6, 0)
+    end
     for _, it in ipairs(folded and {} or st.items) do
       local slotName = ""
       for _, sd in ipairs(BF.SLOTS) do if sd.key == it.slotKey then slotName = sd.name end end
@@ -517,6 +559,99 @@ function BF.DrawPlan(idx, specName)
       local slotKey
       for k, list in pairs(BF.cdb.picks[specName] or {}) do for _, p in ipairs(list) do if p == id then slotKey = k end end end
       itemRow(id, "|cff999999done|r", "", slotKey, true)
+    end
+  end
+  content:SetHeight(math.max(-cursor.y, 10))
+  BF.DrawStatus()
+end
+
+-- the gear planner: every slot with the item planned for it, the stats and score against what you wear
+local PCT_KEYS = { hit = true, crit = true, haste = true, exp = true, dodge = true, parry = true, block = true }
+local NO_TOTAL = { dps = true, dpsmelee = true, dpsoh = true, dpswand = true }
+local EMPTY_ICON = "Interface\\PaperDoll\\UI-Backpack-EmptySlot"
+local function signed(d, pct)
+  local t = pct and string.format("%+.2f%%", d) or string.format("%+.1f", d)
+  return (d > 0 and "|cff33ff99" or "|cffff6060") .. t .. "|r"
+end
+function BF.DrawGear(idx)
+  local W = BF.GearWeights()
+  local worn, plan = BF.WornGear(), BF.PlannedGear()
+  local wv, ws = BF.GearValue(W, worn)
+  local pv, ps, bonus = BF.GearValue(W, plan)
+  local d = pv - wv
+  addBar("Planned gear", string.format("score |cffffd100%s|r   %s", fmt(pv),
+    math.abs(d) > 0.05 and (signed(d) .. " |cff999999against what you wear|r") or "|cff999999same as what you wear|r"))
+  -- stats, four to a line
+  local parts, out = {}, {}
+  for _, sl in ipairs(STAT_LABELS) do
+    local k = sl[1]
+    local a, b = ws[k] or 0, ps[k] or 0
+    if not NO_TOTAL[k] and (math.abs(a) > 0.005 or math.abs(b) > 0.005) then
+      local pct = PCT_KEYS[k]
+      local label = sl[2]:gsub(" %(per .-%)", "")
+      local t = "|cffbbbbbb" .. label .. "|r " .. (pct and string.format("%.2f%%", b) or string.format("%d", math.floor(b + 0.5)))
+      if math.abs(b - a) > 0.005 then
+        local dd = b - a
+        t = t .. " (" .. (pct and signed(dd, true) or ((dd > 0 and "|cff33ff99" or "|cffff6060") .. string.format("%+d", math.floor(dd + (dd > 0 and 0.5 or -0.5))) .. "|r")) .. ")"
+      end
+      parts[#parts + 1] = t
+    end
+  end
+  for i = 1, #parts, 4 do out[#out + 1] = table.concat(parts, "     ", i, math.min(i + 3, #parts)) end
+  if #out > 0 then addLine(table.concat(out, "\n"), 10, 6) end
+  for _, line in ipairs(bonus) do addLine("|cff8080ff" .. line .. "|r", 10, 2) end
+  cursor.y = cursor.y - 6
+  addBar("Slots", "|cff999999click: swap the item   right-click: back to what you wear|r")
+  local function where(id)
+    local w = BF.WhereIs(id)
+    if w == "worn" then return "|cff33ff99worn|r" elseif w == "bags" then return "|cff33ff99in your bags|r"
+    elseif w == "bank" then return "|cff33ff99in your bank|r" end
+    return "|cffff9933not yours yet|r  " .. BF.Source(id, BF.db.items[id]).text
+  end
+  for _, gs in ipairs(BF.GEAR_SLOTS) do
+    local inv, id = gs.inv, plan[gs.inv]
+    local rec = BF.ItemRec(id)
+    local r = nextRow()
+    fillRow(r, rec or {}, 4, cursor.y, nil)
+    r.id = id
+    if not id then r.icon:SetTexture(EMPTY_ICON) end
+    local c = rec and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[rec.q or 1]
+    r.name:SetText(rec and ((c and c.hex or "|cffffffff") .. rec.n .. "|r") or (id and "|cff999999loading...|r" or "|cff777777empty|r"))
+    local v = rec and BF.Score(W, rec.s, inv, rec) or 0
+    local wrec = BF.ItemRec(worn[inv])
+    local wsc = wrec and BF.Score(W, wrec.s, inv, wrec) or 0
+    local changed = id ~= worn[inv]
+    r.info:SetText("|cffffd100" .. fmt(v) .. "|r" .. ((changed and math.abs(v - wsc) > 0.05) and ("  " .. signed(v - wsc)) or ""))
+    r.src:SetText("|cffbbbbbb" .. gs.name .. "|r" .. (id and ("   " .. where(id)) or ""))
+    r.bg:SetShown(changed)
+    r.hint = "Click: pick another item for this slot. Right-click: back to what you wear."
+    r.onClick = function(_, mouse)
+      if mouse == "RightButton" then BF.SetPlanned(inv, nil); f.gearOpen = nil
+      else f.gearOpen = (f.gearOpen ~= inv) and inv or nil end
+      BF.Draw()
+    end
+    cursor.y = cursor.y - 38
+    if f.gearOpen == inv then
+      local opts = BF.SlotOptions(inv, 10)
+      local shown = 0
+      for _, o in ipairs(opts) do
+        if o.id ~= id then
+          shown = shown + 1
+          local orec = BF.db.items[o.id]
+          local r2 = nextRow()
+          fillRow(r2, orec, 40, cursor.y, nil)
+          r2.id = o.id
+          local oc = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[orec.q or 1]
+          r2.name:SetText((oc and oc.hex or "|cffffffff") .. orec.n .. "|r")
+          r2.info:SetText("|cffffd100" .. fmt(o.v) .. "|r  " .. (math.abs(o.v - v) > 0.05 and signed(o.v - v) or "|cff999999same|r"))
+          r2.src:SetText(where(o.id))
+          r2.hint = "Click: put it in " .. gs.name .. "."
+          r2.onClick = function() BF.SetPlanned(inv, o.id); f.gearOpen = nil; BF.Draw() end
+          cursor.y = cursor.y - 38
+        end
+      end
+      if shown == 0 then addLine("|cff999999Nothing else fits here.|r", 44) end
+      cursor.y = cursor.y - 6
     end
   end
   content:SetHeight(math.max(-cursor.y, 10))
@@ -716,6 +851,8 @@ local function build()
   f.viewButtons.plan:SetPoint("TOPRIGHT", -16, -32)
   f.viewButtons.list = button(f, 120, 24, "Best items", function() BF.cdb.view = "list"; BF.Draw() end)
   f.viewButtons.list:SetPoint("RIGHT", f.viewButtons.plan, "LEFT", -4, 0)
+  f.viewButtons.gear = button(f, 120, 24, "Gear planner", function() BF.cdb.view = "gear"; BF.Draw() end)
+  f.viewButtons.gear:SetPoint("RIGHT", f.viewButtons.list, "LEFT", -4, 0)
   local wb = button(f, 120, 22, "Stat weights", function()
     if editor and editor:IsShown() then editor:Hide() else showEditor() end
   end)
@@ -774,10 +911,24 @@ local function build()
   f.progress = f:CreateTexture(nil, "ARTWORK"); f.progress:SetPoint("BOTTOMLEFT", 14, 6); f.progress:SetHeight(2)
   f.progress:SetColorTexture(0.2, 0.8, 0.4, 0.9); f.progress:Hide()
   f.clearPlan = button(f, 100, 20, "Clear plan", function()
-    if f.specName then BF.ClearPicks(f.specName) end
+    if f.specName then BF.ClearPicks(f.specName); BF.ResetOrder(f.specName) end
     BF.Draw()
   end)
   f.clearPlan:SetPoint("BOTTOMRIGHT", -40, 6)
+  f.sortPlan = button(f, 120, 20, "Sort by upgrade", function()
+    if f.specName then BF.ResetOrder(f.specName) end
+    BF.Draw()
+  end)
+  f.sortPlan:SetPoint("RIGHT", f.clearPlan, "LEFT", -4, 0)
+  f.resetGear = button(f, 110, 20, "Back to worn", function() BF.ResetPlanner(); f.gearOpen = nil; BF.Draw() end)
+  f.resetGear:SetPoint("BOTTOMRIGHT", -40, 6)
+  f.bestOwned = button(f, 150, 20, "Best from my items", function()
+    local loading = BF.PlanBestOwned()
+    if loading > 0 then BF.say(loading .. " of your items are still loading - click again in a moment.") end
+    f.gearOpen = nil
+    BF.Draw()
+  end)
+  f.bestOwned:SetPoint("RIGHT", f.resetGear, "LEFT", -4, 0)
 
   -- resizing: drag the bottom right corner
   f:SetResizable(true)
@@ -814,7 +965,7 @@ end
 function BF.Open(view)
   if not f then build(); f:Hide() end
   if view then BF.cdb.view = view end
-  if view == "plan" then BF.SetViewClass(BF.PlayerClass()) end
+  if view == "plan" or view == "gear" then BF.SetViewClass(BF.PlayerClass()) end
   if f:IsShown() then BF.Draw() else f:Show() end
   if not BF.IsScanning() then startScan() end
 end

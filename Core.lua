@@ -975,8 +975,35 @@ function BF.Plan(mode, specIndex)
   end
   for _, st in ipairs(steps) do table.sort(st.items, function(x, y) return x.gain > y.gain end) end
   table.sort(steps, function(x, y) return x.gain > y.gain end)
+  -- the player's own order (arrows on the steps): steps they moved keep their order, in the places those steps take
+  -- up; new steps come in by their upgrade
+  local order = cdb.planOrder and cdb.planOrder[specName]
+  if order then
+    local pos = {}
+    for i, k in ipairs(order) do pos[k] = i end
+    local places, listed = {}, {}
+    for i, st in ipairs(steps) do if pos[st.key] then places[#places + 1] = i; listed[#listed + 1] = st end end
+    table.sort(listed, function(x, y) return pos[x.key] < pos[y.key] end)
+    for n, i in ipairs(places) do steps[i] = listed[n] end
+  end
   return steps, done, specName
 end
+
+-- move a plan step up (dir -1) or down (+1); far = to the top / bottom. keys = the step keys as shown now.
+function BF.MoveStep(specName, keys, key, dir, far)
+  local order = {}
+  for i, k in ipairs(keys) do order[i] = k end
+  local i
+  for n, k in ipairs(order) do if k == key then i = n end end
+  if not i then return end
+  local j = far and (dir < 0 and 1 or #order) or (i + dir)
+  j = math.max(1, math.min(#order, j))
+  table.remove(order, i); table.insert(order, j, key)
+  cdb.planOrder = cdb.planOrder or {}
+  cdb.planOrder[specName] = order
+end
+function BF.ResetOrder(specName) if cdb.planOrder then cdb.planOrder[specName] = nil end end
+function BF.HasOrder(specName) return cdb.planOrder and cdb.planOrder[specName] ~= nil end
 
 -- /bis check <item ID, link or name>: why an item is (not) in the list
 function BF.Explain(q)
@@ -1043,3 +1070,7 @@ function BF.Explain(q)
   end
   return out
 end
+
+-- for Gear.lua
+BF.ReadItem, BF.Usable, BF.CanDualWield, BF.BonusValue = readItem, usable, canDualWield, bonusValue
+BF.SHIELD_CLASSES = SHIELD

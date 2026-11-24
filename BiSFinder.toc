@@ -20,6 +20,7 @@ Data\Weights.lua
 Data\Sources.lua
 Data\Details.lua
 Core.lua
+Gear.lua
 UI.lua
 Minimap.lua
 Main.lua

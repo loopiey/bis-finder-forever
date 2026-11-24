@@ -18,8 +18,21 @@ SlashCmdList.BISFINDER = function(msg, ...)
     for _, line in ipairs(BF.Explain(raw)) do BF.say(line) end
   elseif msg == "minimap" then
     BF.ToggleMinimapButton()
+  elseif msg == "gear" then
+    BF.Open("gear")
+  elseif msg:match("^try") then
+    -- /bis try <item link, ID or name>: put it in the gear planner
+    local raw = (original or ""):match("^%s*[Tt][Rr][Yy]%s+(.+)$") or ""
+    local id = tonumber(raw:match("item:(%d+)") or raw:match("^%s*(%d+)%s*$") or "")
+    if not id and raw ~= "" then
+      local GetInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+      id = GetInstant(raw)
+    end
+    if not id then BF.say("Usage: /bis try <item link, ID or name>")
+    elseif BF.TryItem(id) then BF.Open("gear")
+    else BF.say("Could not try that item: it does not fit any slot, or the game has not loaded it yet (try again).") end
   elseif msg == "help" then
-    BF.say("/bis - open the window. /bis check <item> - why an item is or is not shown. /bis minimap - show or hide the minimap button. /bis rescan - read all items again.")
+    BF.say("/bis - open the window. /bis gear - the gear planner. /bis try <item> - try an item in the gear planner. /bis check <item> - why an item is or is not shown. /bis minimap - show or hide the minimap button. /bis rescan - read all items again.")
   else
     BF.Toggle()
   end

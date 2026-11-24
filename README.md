@@ -18,12 +18,17 @@ Install it from **CurseForge**, or download `BiSFinder-x.y.z.zip` from the **Rel
   the game right now are shown.
 - **Set bonuses:** how many set pieces are worth wearing.
 - **Upgrade plan:** pick the items you want and *My plan* lists the steps to get them, biggest upgrade first.
+  Move the steps around if you want to do them in another order.
+- **Gear planner:** swap items in and out and see your stats and score change. *Best from my items* finds the best
+  set from what you have.
 
 The first time you open it, it reads the items from the game. This takes a few minutes.
 
 ## Commands
 
 - `/bis` - open or close the window
+- `/bis gear` - open the gear planner
+- `/bis try <item>` - try an item in the gear planner
 - `/bis check <item>` - why an item is or is not shown
 - `/bis minimap` - show or hide the minimap button
 - `/bis rescan` - read all items from the game again
