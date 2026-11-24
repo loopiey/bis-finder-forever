@@ -2,7 +2,7 @@
 -- collectors find it, plus the entry in the game's addon menu by the minimap.
 local ADDON, BF = ...
 
-local ICON = "Interface\\AddOns\\BiSFinder\\Media\\minimap"
+local ICON = "Interface\\AddOns\\BiSFinder\\Media\\minimap.tga"   -- Media/minimap.tga, 64x64
 local LDB = LibStub and LibStub("LibDataBroker-1.1", true)
 local DBI = LibStub and LibStub("LibDBIcon-1.0", true)
 
@@ -39,7 +39,8 @@ function BF.MinimapStatus()
   if not b then return "not made yet" end
   local p = b:GetParent()
   local where = p and (p.GetName and p:GetName()) or "no frame"
-  return (b:IsShown() and "shown" or "hidden") .. ", inside " .. tostring(where)
+  local tex = b.icon and b.icon:GetTexture()
+  return (b:IsShown() and "shown" or "hidden") .. ", inside " .. tostring(where) .. ", icon " .. tostring(tex or "missing")
 end
 
 -- /bis minimap: show or hide the button, then say where it is
