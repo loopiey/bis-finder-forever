@@ -32,7 +32,7 @@ whose folder has the same name as its `.toc` file, so rename that folder to `BiS
 
 ## How to use it
 
-1. Type `/bis`, or click the minimap button (right-click opens your plan). The first time, it reads the items from the game - this takes a few minutes, the list fills in as
+1. Type `/bis`, or click the minimap button (left-click: best items, right-click: your plan; click the same button again to close). The first time, it reads the items from the game - this takes a few minutes, the list fills in as
    it goes. After that it opens at once.
 2. Your class and talent tree are picked from your character. Click another class on the left, or another tree at
    the top, to see its list (click your own tree again to go back to automatic).

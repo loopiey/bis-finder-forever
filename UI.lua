@@ -789,6 +789,12 @@ function BF.Open(view)
   if not BF.IsScanning() then startScan() end
 end
 
+-- open the window on this view; if it is already open on this view, close it
+function BF.ToggleView(view)
+  if f and f:IsShown() and BF.cdb.view == view then f:Hide(); return end
+  BF.Open(view)
+end
+
 function BF.Toggle()
   if not f then build(); f:Hide() end   -- a new frame starts shown: hide it so the first /bis opens it
   if f:IsShown() then f:Hide(); return end
