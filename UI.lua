@@ -329,13 +329,33 @@ local function drawSets()
   if shown > 0 then cursor.y = cursor.y - 6 end
 end
 
+-- Ranking all items is the costly part of drawing. It is done again only when something it depends on changed;
+-- folding a slot, resizing the window or a bag update just lays the same results out again.
+local rankKey, rankResults, rankSpec
+local function rankSignature(idx)
+  local parts = { BF.ViewClass(), tostring(idx), BF.cdb.mode, BF.TopN(), BF.cdb.hideFaction and 1 or 0,
+    UnitLevel("player") or 0, BF.dataVersion or 0, BF.gearVersion or 0, BF.weightsVersion or 0, BF.RaidsOpen() and 1 or 0 }
+  for _, d in ipairs(FILTERS) do parts[#parts + 1] = BF.cdb.filters[d[1]] and 1 or 0 end
+  return table.concat(parts, ",")
+end
+local function rank(idx)
+  local key = rankSignature(idx)
+  if key ~= rankKey then
+    rankResults, rankSpec = BF.Rank(BF.cdb.mode, idx)
+    rankKey = key
+  end
+  return rankResults, rankSpec
+end
+
+function BF.IsShown() return f ~= nil and f:IsShown() end
+
 function BF.Draw()
   if not (f and f:IsShown()) then return end
   lastDraw = GetTime()
   if not BF.IsOwnClass() and BF.cdb.view == "plan" then BF.cdb.view = "list" end
   updateControls()
   local idx = BF.SpecIndex()
-  local results, specName = BF.Rank(BF.cdb.mode, idx)
+  local results, specName = rank(idx)
   f.specName = specName
   f.title:SetText("BiSFinder - " .. className(BF.ViewClass()) .. " " .. (specName or "?") .. " - "
     .. (BF.cdb.mode == "endgame" and "Endgame (60)" or "Now"))
@@ -515,6 +535,7 @@ local function showEditor()
         BF.cdb.custom[key] = BF.cdb.custom[key] or {}
         BF.cdb.custom[key][st[1]] = v
         if next(BF.cdb.custom[key]) == nil then BF.cdb.custom[key] = nil end
+        BF.weightsVersion = (BF.weightsVersion or 0) + 1
         BF.Draw()
       end
       eb:SetScript("OnEnterPressed", function(self) save(self); self:ClearFocus() end)
@@ -527,6 +548,7 @@ local function showEditor()
     reset:SetText("Reset to defaults")
     reset:SetScript("OnClick", function()
       BF.cdb.custom[customKey()] = nil
+      BF.weightsVersion = (BF.weightsVersion or 0) + 1
       editor:Refresh(); BF.Draw()
     end)
     function editor:Refresh()

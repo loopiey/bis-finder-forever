@@ -156,13 +156,18 @@ local function pointsFromTabs()
   return pts
 end
 
--- the talent tree with the most points (1-3), nil when none can be read or no points are spent
+-- the talent tree with the most points (1-3), nil when none can be read or no points are spent. Kept until the
+-- talents change (Main.lua calls BF.ClearTreeCache), so drawing the window does not walk the talent tree each time.
+local treeCache, ptsCache
+function BF.ClearTreeCache() treeCache, ptsCache = nil, nil end
 function BF.DetectTree()
+  if treeCache then return treeCache, ptsCache end
   local ok, pts = pcall(pointsFromTraits)
   if not ok or not pts then pts = pointsFromTabs() end
   if not pts then return nil end
   local tree, best = nil, 0
   for i = 1, 3 do if (pts[i] or 0) > best then tree, best = i, pts[i] end end
+  treeCache, ptsCache = tree, pts   -- nil (no points yet) is not kept: asked again next time
   return tree, pts
 end
 
@@ -502,6 +507,7 @@ function BF.BuildCandidates(onDone)
     if k <= #ids then C_Timer.After(0, filter)
     else
       candidatesBy[cls] = list
+      BF.dataVersion = BF.dataVersion + 1
       if BF.ViewClass() == cls then candidates = list end
       onDone(#list, list)
     end
@@ -512,11 +518,14 @@ end
 ---------------------------------------------------------------------------------------------------------------------
 -- Asking the game for the items (throttled; results are kept, so later opens are instant)
 ---------------------------------------------------------------------------------------------------------------------
+-- BF.dataVersion goes up whenever item data changes, so the window knows when it has to rank again.
+BF.dataVersion = 0
 -- At most IN_FLIGHT items are asked at once; one that has not come after WAIT seconds goes to the back of the queue,
 -- up to ROUNDS times. Only an item the server says does not exist (GET_ITEM_INFO_RECEIVED with success = false) is
 -- remembered as missing; a slow answer is never taken as "missing" (1.2: that hid items such as Truefaith Vestments).
 local scanning, queue, qpos = false, nil, 1
-local IN_FLIGHT, TICK, WAIT, ROUNDS = 40, 0.1, 20, 4
+-- 10 at a time every 0.2 s: at most 50 requests a second, gentle on the game and the server
+local IN_FLIGHT, TICK, WAIT, ROUNDS = 10, 0.2, 20, 4
 local rounds, notFound = {}, {}   -- this session: times re-queued; items that never came
 BF.progress = { done = 0, total = 0 }
 BF.notFound = notFound
@@ -545,6 +554,7 @@ function BF.Scan(onProgress, onDone)
         if rec then
           db.items[id], waiting[id], inFlight = rec, nil, inFlight - 1
           BF.progress.done = BF.progress.done + 1
+          BF.dataVersion = BF.dataVersion + 1
         elseif db.missing[id] then
           waiting[id], inFlight = nil, inFlight - 1
           BF.progress.done = BF.progress.done + 1
@@ -561,6 +571,7 @@ function BF.Scan(onProgress, onDone)
         if rec then
           db.items[id] = rec
           BF.progress.done = BF.progress.done + 1
+          BF.dataVersion = BF.dataVersion + 1
         elseif not db.missing[id] then
           if RequestLoad then pcall(RequestLoad, id) end
           waiting[id] = now
@@ -759,9 +770,9 @@ function BF.Rank(mode, specIndex)
     if own then eq, eqIDs = equippedValue(W, sd) end   -- what another class wears is not known
     results[sd.key] = { equipped = eq, equippedIDs = eqIDs, top = {} }
   end
-  local seenName = {}
+  local seenName = {}   -- [slotKey][item name] = best score so far
   BF.lastAll = {}   -- [slotKey] = { [itemID] = score } of everything that passed, for /bis check
-  for _, sd in ipairs(BF.SLOTS) do BF.lastAll[sd.key] = {} end
+  for _, sd in ipairs(BF.SLOTS) do BF.lastAll[sd.key] = {}; seenName[sd.key] = {} end
   for _, id in ipairs(candidates or {}) do
     local rec = db.items[id]
     if rec and usable(cls, level, mode, rec) then
@@ -775,9 +786,9 @@ function BF.Rank(mode, specIndex)
             if sc > 0 then
               local top = results[sd.key].top
               -- one entry per item name (some items exist twice)
-              local key = sd.key .. "|" .. rec.n
-              if not seenName[key] or seenName[key] < sc then
-                seenName[key] = sc
+              local seen = seenName[sd.key]
+              if not seen[rec.n] or seen[rec.n] < sc then
+                seen[rec.n] = sc
                 for i = #top, 1, -1 do if top[i].name == rec.n then table.remove(top, i) end end
                 local pos = #top + 1
                 for i = 1, #top do if sc > top[i].score then pos = i; break end end

@@ -9,6 +9,7 @@ SlashCmdList.BISFINDER = function(msg, ...)
     BF.db.items, BF.db.missing = {}, {}
     wipe(BF.notFound)
     BF.ResetSourceCache()
+    BF.dataVersion = BF.dataVersion + 1
     BF.say("Item data cleared. Open the window to read it again.")
   elseif msg:match("^check") then
     local q = (msg:match("^check%s+(.+)$") or "")
@@ -41,6 +42,9 @@ ev:SetScript("OnEvent", function(self, event, arg1)
     return
   end
   -- gear, bags, level or talents changed: draw again once things settle
+  if event == "PLAYER_EQUIPMENT_CHANGED" then BF.gearVersion = (BF.gearVersion or 0) + 1
+  elseif event ~= "BAG_UPDATE_DELAYED" and event ~= "PLAYER_LEVEL_UP" then BF.ClearTreeCache() end
+  if not (BF.IsShown and BF.IsShown()) then return end   -- the window is closed: nothing to do
   if BF.Draw and not pending then
     pending = true
     C_Timer.After(0.5, function() pending = false; BF.Draw() end)

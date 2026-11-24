@@ -32,11 +32,23 @@ function BF.CreateMinimapButton()
   DBI:Register("BiSFinder", obj, m)
 end
 
+-- where the button is now: shown or hidden, and which frame holds it (the minimap, or a button bar / collector)
+function BF.MinimapStatus()
+  if not (LDB and DBI) then return "the minimap library did not load" end
+  local b = DBI.GetMinimapButton and DBI:GetMinimapButton("BiSFinder") or _G.LibDBIcon10_BiSFinder
+  if not b then return "not made yet" end
+  local p = b:GetParent()
+  local where = p and (p.GetName and p:GetName()) or "no frame"
+  return (b:IsShown() and "shown" or "hidden") .. ", inside " .. tostring(where)
+end
+
+-- /bis minimap: show or hide the button, then say where it is
 function BF.ToggleMinimapButton()
   local m = BF.db.minimap
   m.hide = not m.hide
   if DBI then if m.hide then DBI:Hide("BiSFinder") else DBI:Show("BiSFinder") end end
-  BF.say(m.hide and "Minimap button hidden. /bis minimap shows it again." or "Minimap button shown.")
+  BF.say((m.hide and "Minimap button hidden. /bis minimap shows it again." or "Minimap button shown.")
+    .. " (" .. BF.MinimapStatus() .. ")")
 end
 
 -- the game's addon menu next to the minimap (## AddonCompartmentFunc in the .toc)

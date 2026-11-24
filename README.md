@@ -4,6 +4,14 @@ The best items for your talent tree, slot by slot, and a step-by-step plan to ge
 
 Type **/bis** to open it.
 
+## Install
+
+Get it from **CurseForge** or from the **Releases** page here (the file `BiSFinder-x.y.z.zip`), and unzip it into
+`World of Warcraft\_forever_\Interface\AddOns`. You should end up with `AddOns\BiSFinder\BiSFinder.toc`.
+
+The green **Code > Download ZIP** button gives a folder called `bis-finder-forever-main`. The game only loads an addon
+whose folder has the same name as its `.toc` file, so rename that folder to `BiSFinder` if you use it.
+
 ## What it does
 
 - **The best items for every slot**, for your talent tree. Every item is scored with stat weights for that tree (for
@@ -43,7 +51,7 @@ Type **/bis** to open it.
 
 - `/bis` - open or close the window
 - `/bis check <item>` - why an item is or is not shown (name, item ID, or shift-click the item)
-- `/bis minimap` - show or hide the minimap button
+- `/bis minimap` - show or hide the minimap button (and say where it is)
 - `/bis rescan` - read all items from the game again
 
 ## Sources
