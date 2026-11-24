@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: BiSFinder
 ## Notes: The best items for your talent tree, slot by slot, and a step-by-step upgrade plan. /bis
-## Version: 1.0.0
+## Version: @project-version@
 ## Author: loopiey
 ## IconTexture: Interface\AddOns\BiSFinder\Media\icon
 ## AddonCompartmentFunc: BiSFinder_OnCompartmentClick
