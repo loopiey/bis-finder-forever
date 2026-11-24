@@ -104,10 +104,14 @@ local function getBar(i)
     local key = self.collapseKey
     if not key then return end
     local c = collapsed()
-    if IsShiftKeyDown() then   -- shift-click: fold or open every slot
+    if IsShiftKeyDown() then   -- shift-click: fold or open every slot (or every plan step)
       local fold = not c[key]
-      for _, sd in ipairs(BF.SLOTS) do c[sd.key] = fold or nil end
-      c.SETS = fold or nil
+      if key:find("^P:") then
+        for _, k in ipairs(f.planKeys or {}) do c[k] = fold or nil end
+      else
+        for _, sd in ipairs(BF.SLOTS) do c[sd.key] = fold or nil end
+        c.SETS = fold or nil
+      end
     else
       c[key] = (not c[key]) or nil
     end
@@ -116,8 +120,9 @@ local function getBar(i)
   b:SetScript("OnEnter", function(self)
     if not self.collapseKey then return end
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine(collapsed()[self.collapseKey] and "Click: show this slot" or "Click: hide this slot", 1, 1, 1)
-    GameTooltip:AddLine("Shift-click: hide or show all slots", 0.7, 0.7, 0.7)
+    local step = self.collapseKey:find("^P:")
+    GameTooltip:AddLine((collapsed()[self.collapseKey] and "Click: show " or "Click: hide ") .. (step and "this step" or "this slot"), 1, 1, 1)
+    GameTooltip:AddLine(step and "Shift-click: hide or show all steps" or "Shift-click: hide or show all slots", 0.7, 0.7, 0.7)
     GameTooltip:Show()
   end)
   b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -144,6 +149,19 @@ local function getRow(i)
   r.src = r:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"); r.src:SetPoint("BOTTOMLEFT", r.border, "BOTTOMRIGHT", 8, 1)
   r.src:SetPoint("RIGHT", -8, 0); r.src:SetJustifyH("LEFT"); r.src:SetWordWrap(false)
   local hl = r:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.07)
+  -- remove from the plan (plan view only)
+  r.del = CreateFrame("Button", nil, r)
+  r.del:SetSize(20, 20); r.del:SetPoint("RIGHT", -6, 0)
+  r.del:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
+  r.del:SetHighlightTexture("Interface\\Buttons\\UI-StopButton", "ADD")
+  r.del:SetScript("OnClick", function()
+    if r.id and r.slotKey and f.specName then BF.TogglePick(f.specName, r.slotKey, r.id); BF.Draw() end
+  end)
+  r.del:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:AddLine("Remove from my plan", 1, 1, 1); GameTooltip:Show()
+  end)
+  r.del:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  r.del:Hide()
   r:RegisterForClicks("LeftButtonUp")
   r:SetScript("OnEnter", function(self)
     if not self.id then return end
@@ -152,7 +170,9 @@ local function getRow(i)
     GameTooltip:AddLine(" ")
     if self.score then GameTooltip:AddLine("Score: " .. fmt(self.score), 0.2, 1, 0.6) end
     if self.slotKey then
-      if BF.IsOwnClass() then
+      if self.inPlan then
+        -- the plan view: removing is the button on the right
+      elseif BF.IsOwnClass() then
         GameTooltip:AddLine(self.picked and "Click: remove from my plan" or "Click: add to my plan", 0.6, 0.8, 1)
       else
         GameTooltip:AddLine("The plan is for your own class.", 0.6, 0.6, 0.6)
@@ -168,7 +188,7 @@ local function getRow(i)
     if not link then return end
     if IsModifiedClick("CHATLINK") then ChatEdit_InsertLink(link)
     elseif IsModifiedClick("DRESSUP") then DressUpItemLink(link)
-    elseif self.slotKey and f.specName and BF.IsOwnClass() then
+    elseif self.slotKey and f.specName and BF.IsOwnClass() and not self.inPlan then
       BF.TogglePick(f.specName, self.slotKey, self.id)
       BF.Draw()
     end
@@ -263,7 +283,10 @@ end
 local cursor   -- { y, row, line, bar }
 
 local function reset()
-  for _, r in ipairs(rows) do r:Hide(); r.bg:Hide(); r.check:Hide(); r.slotKey = nil; r.rank:SetText("") end
+  for _, r in ipairs(rows) do
+    r:Hide(); r.bg:Hide(); r.check:Hide(); r.slotKey = nil; r.rank:SetText(""); r.inPlan = nil; r.del:Hide()
+    r.info:SetPoint("TOPRIGHT", -8, -4)
+  end
   for _, h in ipairs(lines) do h:Hide() end
   for _, b in ipairs(bars) do b:Hide() end
   cursor = { y = -4, row = 0, line = 0, bar = 0 }
@@ -435,7 +458,7 @@ function BF.DrawStatus()
   else
     f.progress:Hide()
     if BF.cdb.view == "plan" then
-      f.status:SetText("Click an item to remove it. Done: worn or in your bags or bank.")
+      f.status:SetText("Click a step to fold it. The X removes an item. Done: worn or in your bags or bank.")
     elseif BF.IsOwnClass() then
       f.status:SetText("Click an item to add it to your plan. Shift-click: link in chat. Ctrl-click: try on.")
     else
@@ -447,7 +470,7 @@ end
 -- the plan: one numbered step per dungeon run / quest / craft / reputation / vendor, biggest upgrade first
 function BF.DrawPlan(idx, specName)
   local steps, done = BF.Plan(BF.cdb.mode, idx)
-  local function itemRow(id, info, sub, slotKey, dim)
+  local function itemRow(id, info, sub, slotKey, dim, kind)
     local r = nextRow()
     local rec = BF.db.items[id] or {}
     r.id, r.score, r.srcText, r.slotKey, r.picked = id, nil, BF.Source(id, BF.db.items[id]).text, slotKey, true
@@ -457,25 +480,36 @@ function BF.DrawPlan(idx, specName)
     r.name:SetText((dim and "|cff808080" or (c and c.hex or "|cffffffff")) .. (rec.n or ("Item " .. id)) .. "|r")
     r.info:SetText(info or ""); r.src:SetText(sub or "")
     r.check:SetShown(dim and true or false)
+    r.inPlan = true
+    if slotKey then r.del:Show(); r.info:SetPoint("TOPRIGHT", -32, -4) end
     cursor.y = cursor.y - 38
+    if kind == "c" or kind == "q" then
+      for _, d in ipairs(BF.Details(id, kind)) do addLine("|cffaaaaaa" .. d .. "|r", 66, 2) end
+      cursor.y = cursor.y - 2
+    end
   end
   if #steps == 0 and #done == 0 then
     addBar("Your plan is empty")
     addLine("|cffbbbbbbOpen \"Best items\" and click the items you want. They are put in order here: the biggest upgrade " ..
       "first, with the dungeon, quest, craft or vendor for each.|r", 10)
   end
+  f.planKeys = {}
   for i, st in ipairs(steps) do
-    addBar(string.format("|cffffffff%d.|r %s", i, st.label),
-      st.gain > 0 and string.format("|cff33ff99+%.1f|r", st.gain) or "|cff999999no upgrade|r")
-    for _, it in ipairs(st.items) do
+    local key = "P:" .. st.key
+    f.planKeys[#f.planKeys + 1] = key
+    local folded = collapsed()[key]
+    local right = st.gain > 0 and string.format("|cff33ff99+%.1f|r", st.gain) or "|cff999999no upgrade|r"
+    if folded then right = "|cff999999" .. #st.items .. (#st.items == 1 and " item" or " items") .. "|r   " .. right end
+    addBar(string.format("|cffffffff%d.|r %s", i, st.label), right, key)
+    for _, it in ipairs(folded and {} or st.items) do
       local slotName = ""
       for _, sd in ipairs(BF.SLOTS) do if sd.key == it.slotKey then slotName = sd.name end end
       local gain = it.gain > 0 and string.format("|cff33ff99+%.1f|r", it.gain) or "|cff999999no upgrade|r"
       local slots = (it.slotKey == "FINGER" or it.slotKey == "TRINKET") and 2 or 1
       local choice = (it.of or 1) > slots and string.format(" |cffffd100(choice %d of %d)|r", it.choice, it.of) or ""
-      itemRow(it.id, gain, slotName .. choice .. ((it.what and it.what ~= "") and ("  -  " .. it.what) or ""), it.slotKey, false)
+      itemRow(it.id, gain, slotName .. choice .. ((it.what and it.what ~= "") and ("  -  " .. it.what) or ""), it.slotKey, false, st.key:sub(1, 1))
     end
-    cursor.y = cursor.y - 6
+    cursor.y = cursor.y - (folded and 2 or 6)
   end
   if #done > 0 then
     addBar("|cff999999Done (worn or in your bags or bank)|r")
@@ -653,10 +687,6 @@ local function build()
       cb.ring = cb:CreateTexture(nil, "BACKGROUND"); cb.ring:SetPoint("TOPLEFT", -2, 2); cb.ring:SetPoint("BOTTOMRIGHT", 2, -2)
       cb.icon = cb:CreateTexture(nil, "ARTWORK"); cb.icon:SetAllPoints(); cb.icon:SetTexture(classIcon(cls)); trim(cb.icon)
       local hl = cb:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.15)
-      if cls == me then
-        local you = cb:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        you:SetPoint("TOP", cb, "BOTTOM", 0, -1); you:SetText("you")
-      end
       cb:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(hex(classColor(cls)) .. className(cls) .. "|r")

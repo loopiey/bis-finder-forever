@@ -658,11 +658,29 @@ function BF.Source(id, rec)
   return s
 end
 
+-- Dungeons with separate runs: boss -> the part of the dungeon it is in. Bosses not listed (and trash) stay with the
+-- whole dungeon.
+local WINGS = {
+  Stratholme = {
+    ["Hearthsinger Forresten"] = "Living", ["The Unforgiven"] = "Living", ["Timmy the Cruel"] = "Living",
+    ["Malor the Zealous"] = "Living", ["Crimson Hammersmith"] = "Living", ["Cannon Master Willey"] = "Living",
+    ["Archivist Galford"] = "Living", ["Balnazzar"] = "Living", ["Skul"] = "Living", ["Postmaster Malown"] = "Living",
+    ["Magistrate Barthilas"] = "Undead", ["Stonespine"] = "Undead", ["Baroness Anastari"] = "Undead",
+    ["Nerub'enkan"] = "Undead", ["Maleki the Pallid"] = "Undead", ["Ramstein the Gorger"] = "Undead",
+    ["Black Guard Swordsmith"] = "Undead", ["Baron Rivendare"] = "Undead", ["Ezra Grimm"] = "Undead",
+  },
+}
+local function dungeonStep(place, boss)
+  local wing = WINGS[place] and WINGS[place][boss]
+  if wing then place = place .. " (" .. wing .. ")" end
+  return { key = "d:" .. place, label = "Run " .. place, what = boss == "Trash" and "trash" or boss }
+end
+
 -- Plan steps: where to go for an item. "Drop: Boss - Dungeon" -> one step per dungeon (all its bosses together),
 -- every other source its own step.
 function BF.PlanGroup(cat, text)
   local boss, place = text:match("^Drop: (.-) %- (.+)$")
-  if boss then return { key = "d:" .. place, label = "Run " .. place, what = boss == "Trash" and "trash" or boss } end
+  if boss then return dungeonStep(place, boss) end
   boss, place = text:match("^Raid: (.-) %- (.+)$")
   if boss then return { key = "R:" .. place, label = "Raid " .. place, what = boss } end
   if cat == "q" then return { key = "q:" .. text, label = text, what = "" } end
@@ -673,9 +691,53 @@ function BF.PlanGroup(cat, text)
   end
   if cat == "s" then
     local where = text:match("^(.-) %- ")
-    if where then return { key = "d:" .. where, label = "Run " .. where, what = text:match("%- (.-) %(") or "" } end
+    if where then
+      local boss = text:match("%- (.-) %(") or ""
+      local st = dungeonStep(where, boss)
+      st.what = boss
+      return st
+    end
   end
   return { key = cat .. ":" .. text, label = text, what = "" }
+end
+
+-- Extra lines for the plan: where a recipe is and what it needs, where a quest starts (Data/Details.lua)
+local function zoneName(mapID)
+  local info = mapID and C_Map and C_Map.GetMapInfo and C_Map.GetMapInfo(mapID)
+  return info and info.name
+end
+-- kind "c": the recipe only, "q": the quest only
+function BF.Details(id, kind)
+  local out = {}
+  local mySide = myFactionNow() == "Alliance" and "A" or "H"
+  local c = kind ~= "q" and BF.CRAFT and BF.CRAFT[id]
+  if c then
+    local prof, req, reag, recipe, where = c[1], c[2], c[3], c[4], c[5]
+    out[#out + 1] = prof .. (req > 0 and (" " .. req) or "") .. (reag ~= "" and (":  " .. reag) or "")
+    local lines = {}
+    for _, e in ipairs(where or {}) do
+      local side, text = e:match("^(%a?)|(.*)$")
+      if text and (side == "" or side == mySide) then lines[#lines + 1] = text end
+    end
+    if #lines > 0 then
+      out[#out + 1] = (recipe ~= "" and (recipe .. ":  ") or "Recipe:  ") .. table.concat(lines, ";  ")
+    end
+  end
+  local seen = {}
+  for _, q in ipairs(kind ~= "c" and BF.QUEST and BF.QUEST[id] or {}) do
+    local side, name, level, giver, mapID, x, y, pre = unpack(q)
+    if (side == "" or side == mySide) and not seen[name] then
+      seen[name] = true
+      local zone = zoneName(mapID)
+      local at = zone and (x and string.format("%s (%.1f, %.1f)", zone, x, y) or zone)
+      local text = "Quest " .. name .. (level and (" (level " .. level .. ")") or "")
+      if giver ~= "" then text = text .. " from " .. giver end
+      if at then text = text .. " in " .. at end
+      if pre and #pre > 0 then text = text .. ". First: " .. table.concat(pre, ", ") end
+      out[#out + 1] = text
+    end
+  end
+  return out
 end
 
 local function passesFilters(s)

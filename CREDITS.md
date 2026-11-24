@@ -8,6 +8,7 @@ It is built on data from these GPL-3.0 projects. Thank you to their authors.
 | --- | --- | --- |
 | Stat weights for every talent tree (`Data/Weights.lua`) | **OneForAll** by Smoergi, which takes them from **Geared Forever 1.2** by fistedwaffles05 | GPL-3.0-or-later / GPL-3.0 |
 | Dungeon loot, quest rewards, crafting recipes, reputation rewards, item sets, the pre-raid BiS item lists and the Bind on Equip list (`Data/Sources.lua`) | **OneForAll** by Smoergi | GPL-3.0-or-later |
+| Recipe sources, reagents, quest givers and their places for the plan (`Data/Details.lua`) | **OneForAll** by Smoergi | GPL-3.0-or-later |
 | Item, quest and NPC data: quest checks, vendors, drops (`Data/Sources.lua`) | **QuestieDB** (code: Logonz; data: Muehe, TheCrux (BreakBB), Drejjmit, Dyaxler, Cheeq, TechnoHunter, Yttrium and everyone else) | GPL-3.0 |
 
 ## Libraries
