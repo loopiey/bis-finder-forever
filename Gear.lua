@@ -296,6 +296,11 @@ end
 function BF.PlanBestOwned()
   local gear, loading = BF.BestOwnedGear()
   local worn = BF.WornGear()
+  -- rings and trinkets: an item you already wear stays in the slot it is in (no swapping left and right)
+  for _, p in ipairs({ { 11, 12 }, { 13, 14 } }) do
+    local a, b = p[1], p[2]
+    if (gear[a] and gear[a] == worn[b]) or (gear[b] and gear[b] == worn[a]) then gear[a], gear[b] = gear[b], gear[a] end
+  end
   BF.cdb.planner = {}
   for _, gs in ipairs(BF.GEAR_SLOTS) do
     local inv = gs.inv
